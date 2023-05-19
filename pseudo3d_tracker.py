@@ -207,12 +207,12 @@ def main() -> int:
         plot(x3d, z3d, fig)
         cv2.imshow('xz', fig)
 
-        cv2.imshow('2.5D tracker', disp)
+        cv2.imshow('pseudo3d tracker (press Q to quit)', disp)
 
 
         k = cv2.waitKey(13)
-        k = chr(k)
-        if k == 'q': break
+        k = chr(k % 256)
+        if k in ['q', 'Q']: break
         
         t += 1
 
