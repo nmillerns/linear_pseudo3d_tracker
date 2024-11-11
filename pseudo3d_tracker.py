@@ -41,8 +41,8 @@ class TrackModel:
         self.y = a * self.y + (1. - a) * yt
         self.z = a * self.z + (1. - a) * zt
         self.dx = a * self.dx + (1 - a) * (self.x - x_prev)
-        self.dy = a * self.dx + (1 - a) * (self.y - y_prev)
-        self.dz = a * self.dx + (1 - a) * (self.z - z_prev)
+        self.dy = a * self.dy + (1 - a) * (self.y - y_prev)
+        self.dz = a * self.dz + (1 - a) * (self.z - z_prev)
 
         self.path.append((self.x, self.y, self.z))        
         self.path3d.append(self.project3d())        
