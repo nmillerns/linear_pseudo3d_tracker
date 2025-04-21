@@ -1,4 +1,5 @@
 import cv2
+import enum
 import numpy as np
 import random
 import typing
@@ -13,7 +14,7 @@ class TrackModel:
     Simple linear tracking model to track a 3d sphere on an image
     Uses spehere apparent size for pseudo 3d tracking
     """
-    def __init__(self, x: float, y: float, r: float, alpha: float = 0.5):
+    def __init__(self, x: float, y: float, r: float, alpha: float = 0.7):
         self.x = x
         self.y = y
         self.z = 1
@@ -138,27 +139,34 @@ def centroid(pts: typing.List[COORD2D]) -> COORD2D:
     return (X/N, Y/N)
 
 
-def max_dist2(pts: typing.List[COORD2D], pt: COORD2D) -> float:
+def percentile_dist2(pts: typing.List[COORD2D], pt: COORD2D, percentile = 75) -> float:
     """
     Finds the maximum distance between a point and a series of points
     """
     x0, y0 = pt
-    maxd2 = 0.
+    distance2s = []
     for pt in pts:
         x, y = pt
-        maxd2 = max(maxd2, (x - x0)**2 + (y - y0)**2)
-    return maxd2
+        distance2s.append((x - x0)**2 + (y - y0)**2)
+    distance2s.sort()
+    i = int(percentile / 100 * len(distance2s))
+    return distance2s[i]
 
 
 def add_random_noise(p: COORD2D) -> COORD2D:
     """
     Adds uniform square randon noise to a given 2d point
     """
-    ex = (random.random() - 0.5) * 0.03
-    ey = (random.random() - 0.5) * 0.03
+    ex = (random.random() - 0.5) * 0.06
+    ey = (random.random() - 0.5) * 0.1
     return (p[0] + ex, p[1] + ey)
 
 
+class PlayMode(enum.Enum):
+    PLAY = 1
+    PAUSE = 2
+    
+        
 def main() -> int:
     my_ball = create_ball()
 
@@ -168,32 +176,41 @@ def main() -> int:
     x, y, z = (0, 0, 10)
     t = 0
     track: TrackModel = None
-
+    mode = PlayMode.PLAY
     while True:
         disp[:] = 0
         # compute the next true 3d position of the ball
-        x = np.cos(t / 100. * 2 * np.pi) * 5
-        y = np.sin(t / 1000. * 2 * np.pi) * 3
-        z = np.sin(t / 100. * 2 * np.pi) * 5 + 13
+        x = np.cos(t / 35. * 2 * np.pi) * 5
+        y = np.sin(t / 350. * 2 * np.pi) * 3
+        z = np.sin(t / 35. * 2 * np.pi) * 5 + 13
 
         # get noisy detection of the ball on the image
         detection = draw_ball(my_ball, (x, y, z), disp)
         detection_ctr = centroid(detection)
         # noise
         detection_ctr = add_random_noise(detection_ctr)
-        r = np.sqrt(max_dist2(detection, detection_ctr))
-
+        r = np.sqrt(percentile_dist2(detection, detection_ctr, 75))
+        observton_miss = False
+        
         if track is None:
             # first initialize the track
-            track = TrackModel(detection_ctr[0], detection_ctr[1], r, 0.65)
+            track = TrackModel(detection_ctr[0], detection_ctr[1], r, 0.5)
         else:
+            # Ocassionally miss detection for a frame
+            observton_miss = random.randint(1, 100) <= 25
             track.predict()
             xt, yt = detection_ctr
+            if observton_miss:
+                # update as best we can: directly from prediction
+                xt = track.x
+                yt = track.y
+                r = track.r()
             track.update(xt, yt, r)
 
         # draw the observation and the current track on screen as circles
-        cv2.circle(disp, coord_to_img(detection_ctr, disp), 2, (255, 255, 0), 4)
-        cv2.circle(disp, coord_to_img(detection_ctr, disp), int(r * disp.shape[0]), (0, 255, 255), 1)
+        if not observton_miss:
+            cv2.circle(disp, coord_to_img(detection_ctr, disp), 2, (255, 255, 0), 4)
+            cv2.circle(disp, coord_to_img(detection_ctr, disp), int(r * disp.shape[0]), (0, 255, 255), 1)
 
         cv2.circle(disp, coord_to_img(track.center(), disp), 2, (0, 0, 255), 4)
         cv2.circle(disp, coord_to_img(track.center(), disp), int(track.r() * disp.shape[0]), (0, 0, 255), 1)
@@ -210,9 +227,13 @@ def main() -> int:
         cv2.imshow('pseudo3d tracker (press Q to quit)', disp)
 
 
-        k = cv2.waitKey(13)
+        k = cv2.waitKey(133 if mode == PlayMode.PLAY else -1)
         k = chr(k % 256)
         if k in ['q', 'Q']: break
+        if k == ' ':
+            mode = PlayMode.PAUSE
+        if k == 'p':
+            mode = PlayMode.PLAY
         
         t += 1
 
